@@ -4,9 +4,18 @@ import { ArrowRight, Shield, Lock, Phone, BarChart3, BookOpen, Wind, Moon, Brain
 interface LandingPageProps {
   onEnter: () => void;
   onOpenNews: () => void;
+  onOpenGrounding: () => void;
+  onOpenJournal: () => void;
+  onOpenSleep: () => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, onOpenNews }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ 
+  onEnter, 
+  onOpenNews,
+  onOpenGrounding,
+  onOpenJournal,
+  onOpenSleep 
+}) => {
   return (
     <div className="min-h-screen w-full bg-slate-50 font-sans flex flex-col relative overflow-x-hidden">
       {/* Subtle Background Animation */}
@@ -92,33 +101,42 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, onOpenNews })
 
           {/* Wellness Toolkit - "Comprehensive Suggestions" */}
           <div className="grid md:grid-cols-3 gap-4">
-            <div className="bg-white/80 backdrop-blur p-6 rounded-2xl border border-slate-200 hover:border-teal-300 transition-colors cursor-pointer group">
+            <div 
+              onClick={onOpenGrounding}
+              className="bg-white/80 backdrop-blur p-6 rounded-2xl border border-slate-200 hover:border-teal-300 transition-colors cursor-pointer group hover:shadow-md"
+            >
               <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-indigo-100 transition-colors">
                 <Wind className="w-5 h-5 text-indigo-600" />
               </div>
               <h3 className="font-bold text-slate-800 mb-2">Grounding</h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Feeling overwhelmed? Try the 5-4-3-2-1 technique to reconnect with your surroundings instantly.
+                Feeling overwhelmed? Use the 5-4-3-2-1 technique tool to reconnect with your surroundings instantly.
               </p>
             </div>
 
-            <div className="bg-white/80 backdrop-blur p-6 rounded-2xl border border-slate-200 hover:border-teal-300 transition-colors cursor-pointer group">
+            <div 
+              onClick={onOpenJournal}
+              className="bg-white/80 backdrop-blur p-6 rounded-2xl border border-slate-200 hover:border-teal-300 transition-colors cursor-pointer group hover:shadow-md"
+            >
               <div className="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-amber-100 transition-colors">
                 <BookOpen className="w-5 h-5 text-amber-600" />
               </div>
               <h3 className="font-bold text-slate-800 mb-2">Journaling</h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Getting thoughts out of your head and onto a secure log can reduce cognitive load.
+                Write your thoughts in a private space and receive reflective AI insights to reduce cognitive load.
               </p>
             </div>
 
-            <div className="bg-white/80 backdrop-blur p-6 rounded-2xl border border-slate-200 hover:border-teal-300 transition-colors cursor-pointer group">
+            <div 
+              onClick={onOpenSleep}
+              className="bg-white/80 backdrop-blur p-6 rounded-2xl border border-slate-200 hover:border-teal-300 transition-colors cursor-pointer group hover:shadow-md"
+            >
               <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
                 <Moon className="w-5 h-5 text-blue-600" />
               </div>
-              <h3 className="font-bold text-slate-800 mb-2">Sleep Hygiene</h3>
+              <h3 className="font-bold text-slate-800 mb-2">Sleep Coach</h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Review the checklist for better rest. Sleep is the foundation of emotional regulation.
+                Generate a personalized sleep ritual based on your daily habits and current stress levels.
               </p>
             </div>
           </div>

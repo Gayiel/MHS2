@@ -1,5 +1,8 @@
 {
   "name": "MindFlow Sanctuary",
   "description": "Professional AI Mental Health Support Platform",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
 }

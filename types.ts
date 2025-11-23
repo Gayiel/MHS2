@@ -1,4 +1,5 @@
 
+
 export enum RiskLevel {
   LOW = 'Low',
   MEDIUM = 'Medium',
@@ -14,6 +15,20 @@ export interface AssessmentResult {
   timestamp: string;
 }
 
+export interface GroundingMetadata {
+  groundingChunks: {
+    web?: {
+      uri: string;
+      title: string;
+    };
+    maps?: {
+      placeId: string;
+      title: string;
+      uri: string; // Google Maps URL
+    };
+  }[];
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'model' | 'system';
@@ -21,6 +36,7 @@ export interface Message {
   timestamp: Date;
   isTyping?: boolean;
   assessment?: AssessmentResult; // Only present on user messages after analysis
+  groundingMetadata?: GroundingMetadata; // Present if map/web data is returned
 }
 
 export interface ChatSession {
