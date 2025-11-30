@@ -57,11 +57,38 @@ export interface NewsItem {
   id: string;
   title: string;
   summary: string;
+  fullContent?: string; // Added for reader view
   source: string;
   date: string;
   category: 'Research' | 'Community' | 'Wellness' | 'Policy';
   readTime: string;
+  url?: string; // External link
 }
+
+export interface Persona {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+  systemInstruction: string;
+  themeColor: string; // 'teal', 'amber', 'indigo'
+  avatarUrl: string; // Changed from component to URL string
+}
+
+export interface VoiceOption {
+  id: string;
+  name: string;
+  gender: 'Male' | 'Female' | 'Neutral';
+  description: string;
+}
+
+export const AVAILABLE_VOICES: VoiceOption[] = [
+  { id: 'Kore', name: 'Kore', gender: 'Female', description: 'Balanced & Soothing (Default)' },
+  { id: 'Puck', name: 'Puck', gender: 'Male', description: 'Soft & Gentle' },
+  { id: 'Charon', name: 'Charon', gender: 'Male', description: 'Deep & Grounded' },
+  { id: 'Fenrir', name: 'Fenrir', gender: 'Male', description: 'Authoritative & Clear' },
+  { id: 'Zephyr', name: 'Zephyr', gender: 'Female', description: 'Warm & Empathetic' }
+];
 
 export const CRISIS_RESOURCES: Resource[] = [
   {

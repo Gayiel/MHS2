@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Activity, FileText, Lock } from 'lucide-react';
+import { ShieldCheck, Activity, Lock } from 'lucide-react';
 
 interface DisclaimerModalProps {
   onAccept: () => void;
@@ -19,19 +19,19 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({ onAccept }) =>
           
           <div className="flex justify-center gap-4 mt-4 relative z-10">
             <span className="inline-flex items-center gap-1 text-[10px] bg-teal-800/50 px-2 py-1 rounded border border-teal-600">
-              <Lock className="w-3 h-3" /> HIPAA Compliant
+              <Lock className="w-3 h-3" /> HIPAA Compliant Standards
             </span>
             <span className="inline-flex items-center gap-1 text-[10px] bg-teal-800/50 px-2 py-1 rounded border border-teal-600">
-              <ShieldCheck className="w-3 h-3" /> AES-256 Encryption
+              <ShieldCheck className="w-3 h-3" /> Local-Only Data
             </span>
           </div>
         </div>
         
         <div className="p-6 space-y-5 text-slate-700 overflow-y-auto">
-          <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded text-sm shadow-sm">
-            <h3 className="font-bold text-amber-800 mb-1">Clinical Disclaimer</h3>
-            <p className="text-amber-900/80 leading-relaxed">
-              MindFlow is an AI-powered support tool supervised by automated clinical protocols. 
+          <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded text-sm shadow-sm">
+            <h3 className="font-bold text-orange-800 mb-1">Clinical Disclaimer</h3>
+            <p className="text-orange-900/80 leading-relaxed">
+              MindFlow is an AI-powered support tool supervised by automated protocols. 
               **It is not a replacement for human therapy or emergency care.**
             </p>
           </div>
@@ -72,9 +72,9 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({ onAccept }) =>
         <div className="p-6 pt-2 flex gap-3 bg-slate-50 border-t border-slate-100 shrink-0">
           <button 
             onClick={() => window.location.href = 'https://988lifeline.org/'}
-            className="flex-1 px-4 py-3 rounded-xl border border-rose-200 text-rose-700 font-semibold hover:bg-rose-50 transition-colors text-sm"
+            className="flex-1 px-4 py-3 rounded-xl border border-orange-200 text-orange-700 font-semibold hover:bg-orange-50 transition-colors text-sm"
           >
-            Emergency / Crisis
+            Emergency
           </button>
           <button 
             onClick={onAccept}

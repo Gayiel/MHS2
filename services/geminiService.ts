@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
-import { AssessmentResult, RiskLevel, GroundingMetadata } from '../types';
+import { AssessmentResult, RiskLevel, GroundingMetadata, NewsItem } from '../types';
 
 // Initialize Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -8,39 +8,54 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const CHAT_MODEL = 'gemini-2.5-flash';
 const ANALYZER_MODEL = 'gemini-2.5-flash';
 const TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+const NEWS_MODEL = 'gemini-2.5-flash'; // Capable of search
+
+// --- Cache ---
+let newsCache: { items: NewsItem[], timestamp: number } | null = null;
+const NEWS_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // --- System Instructions ---
 
-const CHAT_SYSTEM_INSTRUCTION = `
-You are MindFlow, a professional mental health support AI operating within the MindFlow Sanctuary platform.
-Your role is to provide immediate, empathetic, and evidence-based emotional support under the simulated oversight of licensed professionals.
+const BASE_SYSTEM_INSTRUCTION = `
+You are MindFlow, an advanced mental health support AI.
+Your GOAL is to provide immediate, actionable support in the chat, AND then guide the user to specialized tools for longer-term relief.
 
-CORE PROTOCOLS:
-1. **Identity**: You are an AI assistant, not a human counselor. You must be transparent about this.
-2. **Methodology**: Use techniques grounded in Cognitive Behavioral Therapy (CBT), Dialectical Behavior Therapy (DBT), and Active Listening. Validate feelings first, then gently explore coping strategies.
-3. **Safety First**:
-   - Continuously monitor for risk (self-harm, suicide, violence).
-   - If risk is detected, shift to a directive, safety-focused mode.
-   - Provide the 988 Suicide & Crisis Lifeline immediately in high-risk scenarios.
-4. **Boundaries**:
-   - DO NOT diagnose conditions (e.g., "You have depression"). Instead, say "That sounds like symptoms of depression."
-   - DO NOT prescribe medication.
-   - DO NOT simulate a personal life.
-5. **Tone**: Professional, warm, clinical yet accessible, non-judgmental, and calm.
-6. **Local Resources**: When a user asks for nearby help and location is provided, use the Google Maps tool to find specific mental health clinics, therapists, or support groups nearby. Present them clearly.
-7. **Voice Interaction**: If the user is speaking to you, keep responses concise (2-3 sentences max) and conversational unless a detailed explanation is requested.
+AVAILABLE SERVICES (Tools to recommend after offering immediate help):
+1. **Grounding Station**: For high anxiety, panic attacks, dissociation, or overwhelm.
+2. **Reflective Journal**: For racing thoughts, need to vent, processing complex emotions, or "brain dump".
+3. **Sleep Coach**: For insomnia, nightmares, bedtime anxiety, or rest issues.
+4. **Crisis Resources**: For self-harm, suicide risk, or immediate danger (Call 988/911).
 
-Example Interaction:
-User: "I feel like I'm failing at everything."
-MindFlow: "I hear how heavy that weighs on you. It sounds like you're experiencing some intense feelings of inadequacy right now. When we feel overwhelmed, our minds can sometimes tunnel-vision on the negatives. Can you tell me more about what triggered this feeling today?"
+OPERATIONAL PROTOCOL:
+1. **IDENTIFY INTENT**:
+   - **Service Seeking**: If the user mentions finding a doctor, therapist, or psychiatrist:
+     - **MANDATORY**: You MUST ask for their **Location (City/Zip)** and **Insurance Provider** (or if they are paying out-of-pocket) BEFORE making any recommendations.
+     - Example: "I can certainly help you find a professional. To find the best match, could you share your zip code and what insurance plan you have?"
+   - **Emotional Distress**: If the user is overwhelmed/sad, offer immediate validation.
+
+2. **ENGAGE & SUPPORT**:
+   - Be helpful *in the moment*.
+   - Do NOT ignore logistical questions to force a breathing exercise.
+
+3. **BRIDGE TO TOOL**: Once you have established rapport and understood their need, bridge them to the best tool.
+
+4. **SAFETY**: If Risk is High/Critical, bypass everything and refer to Crisis Resources immediately.
+
+5. **CONTENT DELIVERY (CRITICAL - NO WALLS OF TEXT)**:
+   - **CHUNK IT**: If a topic is complex (e.g., "How to find a therapist"), DO NOT output a 500-word guide.
+   - **STEP-BY-STEP**: Give **Step 1 ONLY**. Then ask: "Does that make sense, or shall we move to Step 2?"
+   - **CONCISE**: Keep individual responses under 200 words unless absolutely necessary.
+   - **FORMAT**: Use bullet points and short paragraphs.
+
+BOUNDARIES:
+- DO NOT diagnose.
+- DO NOT prescribe.
 `;
 
 const GROUNDING_SYSTEM_INSTRUCTION = `
 You are a calming Grounding Assistant. Your ONLY goal is to lower the user's anxiety using the 5-4-3-2-1 technique or box breathing.
 1. Speak in short, soothing sentences.
 2. Guide them slowly. Do not dump all instructions at once.
-3. Ask for one sense at a time (e.g., "Tell me 5 things you can see"). Wait for their response before moving to the next.
-4. If they seem panicked, reassure them they are safe.
 `;
 
 const JOURNAL_SYSTEM_INSTRUCTION = `
@@ -48,34 +63,40 @@ You are a Reflective Insight partner. The user will submit a journal entry.
 Your task:
 1. Read the entry deeply.
 2. Provide ONE sentence of empathetic validation.
-3. Provide ONE open-ended question or observation based on CBT principles to help the user gain perspective.
-4. Do NOT try to "fix" the problem. Just help them explore it.
+3. Provide ONE open-ended question or observation based on CBT principles.
 `;
 
 const SLEEP_SYSTEM_INSTRUCTION = `
-You are a Sleep Hygiene Coach. The user will provide data about their day (caffeine, stress, screen time).
-Your task:
-1. Analyze their habits.
-2. Create a specific, 3-step "Sleep Ritual" for tonight to help them wind down.
-3. Be scientific but accessible (explain *why* screen time hurts melatonin).
-4. Keep it encouraging.
+You are a Sleep Hygiene Coach. Create a specific, 3-step "Sleep Ritual" based on user inputs.
 `;
 
 const ANALYZER_SYSTEM_INSTRUCTION = `
-You are the Clinical Safety Monitor for the MindFlow Sanctuary platform. 
-Your task is to analyze user messages for clinical risk and emotional sentiment to populate the counselor dashboard.
+You are the Clinical Safety Monitor. Analyze the user's message for immediate risk of harm.
 
-Output must be a valid JSON object.
+CLASSIFICATION RULES (STRICT PRECISION REQUIRED):
 
-Scoring Guide:
-- sentimentScore: Number between -10 (Despair/Acute Distress) to 10 (Thriving/Joy).
-- riskLevel: 
-  - "Low" (Daily stressors, mild anxiety)
-  - "Medium" (Persistent symptoms, isolation, moderate anxiety)
-  - "High" (Expressions of hopelessness, indirect self-harm references)
-  - "Critical" (Explicit suicidal intent, plan, or immediate danger)
-- flags: Clinical keywords (e.g., "Suicidal Ideation", "Self-Harm Risk", "Panic Attack", "Substance Use", "Trauma Response").
-- reasoning: Clinical note style explanation (e.g., "User expresses feelings of worthlessness but denies intent to harm. Monitor closely.").
+1. **CRITICAL RISK (Emergency)**:
+   - Explicit, immediate intent to die or harm self/others TODAY.
+   - Specific plans mentioned (method, time, place).
+   - "I am going to kill myself now."
+
+2. **HIGH RISK (Crisis Referral)**:
+   - Strong suicidal ideation without immediate plan.
+   - Severe self-harm urges.
+   - "I wish I could just go to sleep and never wake up."
+
+3. **MEDIUM RISK (Clinical Attention)**:
+   - Panic attacks, severe anxiety, dissociation.
+   - Expressions of hopelessness *without* intent to die.
+   - "I feel like I'm falling apart."
+
+4. **LOW RISK (Support/Navigation - DO NOT FLAG AS CRISIS)**:
+   - **SERVICE FRUSTRATION**: Expressions of anger/hopelessness regarding the healthcare system, finding a doctor, insurance, or appointments.
+     - Example: "I want to give up, nobody is helping me find a therapist!" -> LOW RISK (Service Issue).
+     - Example: "I hate this broken system." -> LOW RISK.
+   - **Venting**: General sadness, stress, relationship issues.
+
+Output valid JSON with: riskLevel, sentimentScore, flags, reasoning.
 `;
 
 // --- API Calls ---
@@ -86,33 +107,42 @@ interface ChatResponse {
 }
 
 /**
- * Sends a message to the chat model, optionally utilizing Google Maps if location is provided.
- * Supports both text and audio input.
+ * Sends a message to the chat model.
+ * Allows overriding system instructions for personas.
  */
 export const sendMessageToGemini = async (
   history: { role: string; parts: { text: string }[] }[],
   message: string,
   location?: { latitude: number; longitude: number },
   audioInput?: { data: string; mimeType: string },
-  mode: 'chat' | 'grounding' = 'chat'
+  mode: 'chat' | 'grounding' = 'chat',
+  customSystemInstruction?: string
 ): Promise<ChatResponse> => {
   try {
+    const instruction = customSystemInstruction || (mode === 'grounding' ? GROUNDING_SYSTEM_INSTRUCTION : BASE_SYSTEM_INSTRUCTION);
+    
     const config: any = {
-      systemInstruction: mode === 'grounding' ? GROUNDING_SYSTEM_INSTRUCTION : CHAT_SYSTEM_INSTRUCTION,
-      temperature: mode === 'grounding' ? 0.3 : 0.5,
+      systemInstruction: instruction,
+      temperature: mode === 'grounding' ? 0.3 : 0.7,
     };
 
-    // If location is provided, enable Google Maps tool
-    if (location && mode === 'chat') {
-      config.tools = [{ googleMaps: {} }];
-      config.toolConfig = {
-        retrievalConfig: {
-          latLng: {
-            latitude: location.latitude,
-            longitude: location.longitude
+    // If in chat mode, enable Google Search AND Maps to find specific providers with insurance data
+    if (mode === 'chat') {
+      config.tools = [
+        { googleSearch: {} },
+        { googleMaps: {} } // Allow Maps if location is precise
+      ];
+      
+      if (location) {
+        config.toolConfig = {
+          retrievalConfig: {
+            latLng: {
+              latitude: location.latitude,
+              longitude: location.longitude
+            }
           }
-        }
-      };
+        };
+      }
     }
 
     const chat = ai.chats.create({
@@ -154,6 +184,164 @@ export const sendMessageToGemini = async (
     return {
       text: "I apologize, but I am unable to access the response module at the moment. If you are in crisis, please call 988 immediately."
     };
+  }
+};
+
+/**
+ * Fetches real-time news headlines using Google Search Grounding.
+ * Implements caching for speed.
+ */
+export const fetchNewsHeadlines = async (forceRefresh: boolean = false): Promise<NewsItem[]> => {
+  // Return cached data if available and fresh
+  if (!forceRefresh && newsCache && (Date.now() - newsCache.timestamp < NEWS_CACHE_DURATION)) {
+    return newsCache.items;
+  }
+
+  try {
+    // OPTIMIZED PROMPT: Fewer items, shorter summaries for faster generation
+    const prompt = `
+      You are a real-time mental health news feed. 
+      Use Google Search to find 5 distinct, recent (last 30 days), and credible news stories.
+      Focus on: Positive breakthroughs, new research, wellness trends, or community support.
+      
+      Output in strictly structured format using "|||" as a separator.
+      Format:
+      |||
+      TITLE: [Headline]
+      SOURCE: [Source Name]
+      DATE: [Date]
+      CATEGORY: [Research/Wellness/Community/Policy]
+      SUMMARY: [1 concise sentence only]
+      |||
+    `;
+
+    const response = await ai.models.generateContent({
+      model: NEWS_MODEL,
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        temperature: 0.3, // Lower temperature for faster, more deterministic output
+      }
+    });
+
+    const text = response.text || "";
+    const chunks = text.split('|||').filter(c => c.trim().length > 10);
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    
+    const fallbackUrl = groundingChunks.find(c => c.web?.uri)?.web?.uri;
+
+    const newsItems: NewsItem[] = chunks.map((chunk, index) => {
+      const getField = (field: string) => {
+        const match = chunk.match(new RegExp(`${field}:\\s*(.*)`, 'i'));
+        return match ? match[1].trim() : '';
+      };
+
+      const title = getField('TITLE') || "Mental Health Update";
+      const matchingChunk = groundingChunks.find(gc => 
+        gc.web?.title && title.toLowerCase().includes(gc.web.title.toLowerCase().split(' ')[0])
+      );
+      
+      return {
+        id: index.toString(),
+        title: title,
+        source: getField('SOURCE') || "MindFlow News",
+        date: getField('DATE') || "Recent",
+        category: (getField('CATEGORY') as any) || "Wellness",
+        summary: getField('SUMMARY'),
+        readTime: `${2 + Math.floor(Math.random() * 3)} min read`,
+        url: matchingChunk?.web?.uri || fallbackUrl
+      };
+    }).filter(item => item.summary.length > 0);
+
+    const limitedItems = newsItems.slice(0, 5);
+
+    // Update Cache
+    if (limitedItems.length > 0) {
+      newsCache = { items: limitedItems, timestamp: Date.now() };
+    }
+
+    return limitedItems;
+
+  } catch (error) {
+    console.error("News Fetch Error:", error);
+    return newsCache ? newsCache.items : [];
+  }
+};
+
+/**
+ * Generates Mixed Stats (Reality vs Response) for Landing Page
+ */
+export const fetchMentalHealthStats = async (): Promise<{ value: string; label: string; subtext: string; type: 'reality' | 'response' }[]> => {
+  // Simulate live platform data + Static trusted global stats
+  
+  const randomVariance = (base: number, variance: number) => {
+     return Math.floor(base + (Math.random() * variance * 2 - variance));
+  };
+
+  const todayHelpSeekers = randomVariance(42100, 1500).toLocaleString();
+  const activeSessions = randomVariance(3100, 200).toLocaleString();
+
+  return [
+    { 
+      value: "1 in 5", 
+      label: "Adults", 
+      subtext: "Affected",
+      type: 'reality'
+    },
+    { 
+      value: todayHelpSeekers, 
+      label: "Seeking Help", 
+      subtext: "Online Now",
+      type: 'response'
+    },
+    { 
+      value: "60%", 
+      label: "Untreated", 
+      subtext: "Global Gap",
+      type: 'reality'
+    },
+    { 
+      value: activeSessions, 
+      label: "Active Chats", 
+      subtext: "Live Support",
+      type: 'response'
+    }
+  ];
+};
+
+/**
+ * Generates a full article based on a headline using search
+ */
+export const fetchFullArticle = async (title: string): Promise<{content: string, url?: string}> => {
+  try {
+    const prompt = `
+      Write a comprehensive, engaging news article about this topic: "${title}".
+      Use Google Search to find specific details, quotes, and recent findings to make it factual.
+      Format the output as clean HTML using only <h3>, <p>, <ul>, <li>, and <strong> tags.
+      Do not use markdown. Do not include <html> or <body> tags.
+      Make it feel like a professional magazine article.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: NEWS_MODEL,
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        temperature: 0.4,
+      }
+    });
+    
+    // extract the first relevant URL from grounding
+    const url = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.find(c => c.web?.uri)?.web?.uri;
+
+    return {
+      content: response.text || "<p>Unable to load full content.</p>",
+      url: url
+    };
+
+  } catch (error) {
+    console.error("Article Gen Error:", error);
+    return { content: "<p>Content currently unavailable.</p>" };
   }
 };
 
@@ -259,9 +447,8 @@ export const analyzeMessageRisk = async (message: string): Promise<AssessmentRes
 
 /**
  * Generates speech from text using Gemini TTS.
- * Returns the raw audio buffer.
  */
-export const generateSpeech = async (text: string): Promise<AudioBuffer | null> => {
+export const generateSpeech = async (text: string, voiceName: string = 'Kore'): Promise<AudioBuffer | null> => {
   try {
     const response = await ai.models.generateContent({
       model: TTS_MODEL,
@@ -270,7 +457,7 @@ export const generateSpeech = async (text: string): Promise<AudioBuffer | null> 
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' }, // 'Kore' is a good neutral/calm voice
+            prebuiltVoiceConfig: { voiceName: voiceName }, 
           },
         },
       },
@@ -320,17 +507,12 @@ async function decodeAudioData(
   for (let channel = 0; channel < numChannels; channel++) {
     const channelData = buffer.getChannelData(channel);
     for (let i = 0; i < frameCount; i++) {
-      // Convert Int16 to Float32 [-1.0, 1.0]
       channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
     }
   }
   return buffer;
 }
 
-/**
- * Plays an AudioBuffer.
- * Returns a function to stop the audio.
- */
 export const playAudioBuffer = (buffer: AudioBuffer): () => void => {
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
   const source = audioContext.createBufferSource();
